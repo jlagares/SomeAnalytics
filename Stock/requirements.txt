@@ -1,0 +1,4 @@
+yahoofinancials
+tensorflow
+scikit-learn
+seaborn

@@ -52,7 +52,8 @@ start_date = '2019-01-01'
 end_date = datetime.now().strftime('%Y-%m-%d')
 
 # List of symbols to fetch
-symbols_to_fetch = ['INDI', 'AAPL', 'GOOGL', "INDI", "NDAQ"]  # Add your symbols here
+symbols_to_fetch = [ 'AAPL', 'GOOGL', "INDI", "NDAQ", "SPX"]  # Add your symbols here
+symbols_to_fetch = ["ES=F"]  # Add your symbols here
 
 for symbol in symbols_to_fetch:
     download_and_save_stock_data(symbol, start_date, end_date)

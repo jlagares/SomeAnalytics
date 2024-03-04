@@ -160,7 +160,7 @@ def repeat_series(data):
     data_np = np.array(data)
     data_reshaped =data_np.reshape(1, len(data_np))
     # Stack final_data 3 times to create the middle rows
-    rep_data = np.repeat(data_reshaped, 3, axis=0)
+    rep_data = np.repeat(data_reshaped, 1, axis=0)
     return (rep_data)
 
 # Execute with the 5 mo
@@ -206,7 +206,7 @@ def create_stock_snapshot_N(csv_file, window_size):
 
     # List of all final arrays for iteration
     final_arrays = [final_data, final_rsi, final_mfi, final_k_values, final_d_values, final_atr, final_macd_line, final_signal_line, final_macd_histogram]
-    zeros_array = np.zeros((2, len(final_data)))
+    zeros_array = np.zeros((1, len(final_data)))
 
     # Initialize the final structured array
     structured_array = zeros_array #zeros_array  # Assuming the data is 1D, adjust the reshape accordingly if it's not
@@ -221,7 +221,6 @@ def create_stock_snapshot_N(csv_file, window_size):
 def create_stock_snapshot_levels(csv_file,level_array):
     # Use a list comprehension to generate the arrays
     snapshots = [create_stock_snapshot_N(csv_file=csv_file, window_size=i) for i in level_array]
-    
     # Stack the arrays vertically
     return(np.vstack(snapshots))
 
@@ -230,10 +229,32 @@ def create_full_snapshot_levels(file_list):
     stock_view = [create_stock_snapshot_levels(csv_file=filename, level_array=[1,5,10]) for filename in file_list]
     # Stack the arrays vertically
     fullPic = np.vstack(stock_view)    
+    # swap rows to get all same indicators together.
+    
     plt.imshow(fullPic, cmap='gray', aspect='auto')
     plt.colorbar()  # Optionally add a colorbar
-    plt.show()       
+    plt.show()     
+    print(fullPic.shape)  
+    # Number of rows in each group
+    group_size = 30 # 10 indicators
+    # Number of complete groups
+    num_groups = fullPic.shape[0] // group_size
+    # Initialize an empty list to hold the reordered rows
+    reordered_rows = []
+    # Loop over each row within the groups
+    for i in range(group_size):
+        # Extract the i-th row from each group and concatenate them
+        rows = [fullPic[j * group_size + i] for j in range(num_groups) if j * group_size + i < fullPic.shape[0]]
+        if rows:  # If there are rows extracted, extend the list
+            reordered_rows.extend(rows)
+    # Convert the list of reordered rows back to a numpy array
+    reordered_arr = np.array(reordered_rows)
+    print(reordered_arr.shape)
+    plt.imshow(reordered_arr, cmap='gray', aspect='auto')
+    plt.colorbar()  # Optionally add a colorbar
+    plt.show()   
     
+# Visualize in deep-------------------------------------------------------------
 def select_and_plot_indicators(csv_file):
     # Load CSV file
     random.seed(42)
@@ -393,4 +414,5 @@ def select_and_plot_indicators(csv_file):
     
         
 # select_and_plot_indicators('c:\stock\AAPL.csv')
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv'])
+# create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv'])
+create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])

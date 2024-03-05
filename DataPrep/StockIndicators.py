@@ -2,8 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 import pandas as pd
+from scipy.stats import linregress
 
-NUM_DAYS = 180
+
+NUM_DAYS = 120
 WINDOW_DAYS = 360
 PREDICT_DAYS = 10
 
@@ -163,20 +165,27 @@ def repeat_series(data):
     rep_data = np.repeat(data_reshaped, 1, axis=0)
     return (rep_data)
 
+def is_good_trend(predict_data, percentage_diff_threshold):
+    # Calculate the average of the last 3 values
+    avg_last_3 = predict_data['adjclose'].tail(3).mean()
+    # Get the first value
+    first_value = predict_data['adjclose'].iloc[0]
+    # Calculate the percentage difference
+    percentage_diff = ((avg_last_3 - first_value) / first_value) * 100
+    # Check if the first 3 elements are monotonically increasing
+    first_3_increasing = predict_data['adjclose'].head(3).is_monotonic_increasing
+    print(f"The percentage difference between the first value and the average of the last 3 values is: {percentage_diff}%")
+    return percentage_diff > percentage_diff_threshold and first_3_increasing
+
 # Execute with the 5 mo
 # Assuming the modified indicator functions are defined here (calculate_rsi, calculate_mfi, calculate_stochastic_oscillator)
-def create_stock_snapshot_N(csv_file, window_size):
+def create_stock_snapshot_N(csv_file, start_index, window_size):
     # Load CSV file
-    random.seed(42)
     df = pd.read_csv(csv_file)
-
-    # Randomly select WINDOW_DAYS consecutive days
-    max_start_index = len(df) - WINDOW_DAYS
-
-    start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
+    # start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
     print(f" PREDICTING FROM VALUE {start_index}")
     selected_data = df.iloc[start_index-WINDOW_DAYS:start_index]
-    predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
+    # predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
     
     # Window size
     N = window_size
@@ -218,15 +227,46 @@ def create_stock_snapshot_N(csv_file, window_size):
         # structured_array = np.vstack([structured_array, zeros_array])
     return(structured_array)    
 
-def create_stock_snapshot_levels(csv_file,level_array):
+def create_stock_snapshot_levels(csv_file,start_index, level_array):
     # Use a list comprehension to generate the arrays
-    snapshots = [create_stock_snapshot_N(csv_file=csv_file, window_size=i) for i in level_array]
+    snapshots = [create_stock_snapshot_N(csv_file=csv_file, start_index = start_index, window_size=i) for i in level_array]
     # Stack the arrays vertically
     return(np.vstack(snapshots))
 
+def is_good_trend_csv(df, start_index, percentage_diff_threshold, debug=False):
+    # Randomly select WINDOW_DAYS consecutive days
+    predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
+    if(is_good_trend(predict_data, percentage_diff_threshold)):
+        if debug:
+            print("Good trend")
+             # Calculate regression to do the classification
+            regression_data = predict_data['adjclose']
+            x = regression_data.index.values
+            y = regression_data.values  # Corrected line
+
+            slope, intercept, r_value, p_value, std_err = linregress(x, y)
+            print(f"The slope of the regression line is: {slope}")
+            # Plot the predict_data
+            plt.scatter(x, y, color='blue', label='Data')
+            # Calculate the values of the regression line
+            regression_line = [slope*xi + intercept for xi in x]
+            # Plot the regression line
+            plt.plot(x, regression_line, color='red', label='Regression Line')
+            plt.show()
+        return True   
     
 def create_full_snapshot_levels(file_list):
-    stock_view = [create_stock_snapshot_levels(csv_file=filename, level_array=[1,5,10]) for filename in file_list]
+
+    # Check if the trend is good
+    df = pd.read_csv(file_list[0])
+    max_start_index = len(df) - WINDOW_DAYS
+    start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
+    while (not(is_good_trend_csv(df, start_index, 5, True))):
+        start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
+        print("Bad trend")
+
+    print(f"Good trend at index {start_index}")
+    stock_view = [create_stock_snapshot_levels(filename, start_index, level_array=[1,5,10]) for filename in file_list]
     # Stack the arrays vertically
     fullPic = np.vstack(stock_view)    
     # swap rows to get all same indicators together.
@@ -257,17 +297,37 @@ def create_full_snapshot_levels(file_list):
 # Visualize in deep-------------------------------------------------------------
 def select_and_plot_indicators(csv_file):
     # Load CSV file
-    random.seed(42)
+    # random.seed(42)
     df = pd.read_csv(csv_file)
 
     # Randomly select WINDOW_DAYS consecutive days
     max_start_index = len(df) - WINDOW_DAYS
+    while True:
+        start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
+        print(f" PREDICTING FROM VALUE {start_index}")
+        selected_data = df.iloc[start_index-WINDOW_DAYS:start_index]
+        predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
 
-    start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-    print(f" PREDICTING FROM VALUE {start_index}")
-    selected_data = df.iloc[start_index-WINDOW_DAYS:start_index]
-    predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
-    
+        # Calculate regression to do the classification
+        regression_data = predict_data['adjclose']
+        x = regression_data.index.values
+        y = regression_data.values  # Corrected line
+
+        slope, intercept, r_value, p_value, std_err = linregress(x, y)
+        print(f"The slope of the regression line is: {slope}")
+        if is_good_trend(predict_data, 5):
+            break
+    # Plot the predict_data
+    plt.scatter(x, y, color='blue', label='Data')
+
+    # Calculate the values of the regression line
+    regression_line = [slope*xi + intercept for xi in x]
+
+    # Plot the regression line
+    plt.plot(x, regression_line, color='red', label='Regression Line')
+
+    plt.legend()
+    plt.show()
     # Window size
     N = 5
     # Calculate the rolling window average
@@ -307,8 +367,8 @@ def select_and_plot_indicators(csv_file):
         structured_array = np.vstack([structured_array, final_data_reshaped])
         structured_array = np.vstack([structured_array, zeros_array])
                 
-    print(structured_array.shape)
-    print(final_data)
+    # print(structured_array.shape)
+    # print(final_data)
     plt.imshow((structured_array * 255).astype(np.uint8), cmap='gray',aspect='auto')
     plt.colorbar()  # Optionally add a colorbar to show the mapping from data values to colors
     plt.show()
@@ -398,6 +458,7 @@ def select_and_plot_indicators(csv_file):
     plt.plot(selected_data['date'][-len(signal_line):], signal_line, label='Signal Line', color='magenta')
     plt.plot(selected_data['date'][-len(macd_histogram):], macd_histogram, label='MACD Histogram', color='blue')
     plt.title('MACD (Moving Average Convergence Divergence)')
+
  
     plt.show()
 
@@ -416,3 +477,9 @@ def select_and_plot_indicators(csv_file):
 # select_and_plot_indicators('c:\stock\AAPL.csv')
 # create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv'])
 create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+# select_and_plot_indicators(r'c:\stock\ES=F.csv')

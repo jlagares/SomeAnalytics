@@ -48,13 +48,28 @@ def download_and_save_stock_data(symbol, start_date, end_date, base_directory="c
         print(f"An error occurred while saving {symbol}: {e}")
 
 # Choose a date range
-start_date = '2019-01-01'
+start_date = '2008-01-01'
 end_date = datetime.now().strftime('%Y-%m-%d')
 
 # List of symbols to fetch
-symbols_to_fetch = [ 'AAPL', 'GOOGL', "INDI", "NDAQ", "SPX", "ES=F"]  # Add your symbols here
-symbols_to_fetch = [ 'SX7E.Z']  # Add your symbols here
-symbols_to_fetch = [ 'YM=F']  # Add your symbols here
+symbols_to_fetch = [ 'AAPL', 'ES=F', "YM=F", "NQ=F", 'YM=F',"^FTSE","GC=F", "SI=F"]
 
+# for symbol in symbols_to_fetch:
+#     download_and_save_stock_data(symbol, start_date, end_date)
+
+# Get the number of rows for each symbol file and store the minimum number of rows in variable minRows
+minRows = 1000000
 for symbol in symbols_to_fetch:
-    download_and_save_stock_data(symbol, start_date, end_date)
+    stock = pd.read_csv(f"c:\\stock\\{symbol}.csv")
+    if stock.shape[0] < minRows:
+        minRows = stock.shape[0]
+print(f"minRows: {minRows}")
+
+# Clean the data
+# Copy each file in a <filename>-Cleaned.csv file with the same number of rows as minRows removing the top data rows
+for symbol in symbols_to_fetch:
+    stock = pd.read_csv(f"c:\\stock\\{symbol}.csv")
+    #if a row only has date, then put the previous day value
+    stock.ffill(inplace=True)
+    stock = stock.tail(minRows)
+    stock.to_csv(f"c:\\stock\\Clean\\{symbol}.csv", index=False)

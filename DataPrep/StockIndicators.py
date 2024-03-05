@@ -4,6 +4,8 @@ import random
 import pandas as pd
 from scipy.stats import linregress
 import imageio
+import itertools
+import os
 
 NUM_DAYS = 120
 WINDOW_DAYS = 360
@@ -99,6 +101,14 @@ def calculate_rsi(prices, period=14):
     loss = np.where(deltas < 0, -deltas, 0)
     avg_gain = np.convolve(gain, np.ones(period)/period, mode='valid')
     avg_loss = np.convolve(loss, np.ones(period)/period, mode='valid')
+    # AVOID ERROR: Division by zero in the calculation of relative strength
+    # Create a copy of avg_loss for shifting
+    avg_loss_shifted = np.roll(avg_loss, 1)
+    # Replace zeros with the next value
+    avg_loss = np.where(avg_loss==0, avg_loss_shifted, avg_loss)
+    # If the first element is zero, replace it with the next non-zero value
+    if avg_loss[0] == 0:
+        avg_loss[0] = avg_loss[avg_loss != 0][0]
     rs = avg_gain[-NUM_DAYS:] / avg_loss[-NUM_DAYS:]
     rsi = normalize_series(100 - (100 / (1 + rs)))
     return np.concatenate([np.full(period-1, 0.5), rsi])  # Pad the start with NaNs
@@ -183,7 +193,7 @@ def create_stock_snapshot_N(csv_file, start_index, window_size):
     # Load CSV file
     df = pd.read_csv(csv_file)
     # start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-    print(f" PREDICTING FROM VALUE {start_index}")
+    #print(f" PREDICTING FROM VALUE {start_index}")
     selected_data = df.iloc[start_index-WINDOW_DAYS:start_index]
     # predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
     
@@ -233,74 +243,76 @@ def create_stock_snapshot_levels(csv_file,start_index, level_array):
     # Stack the arrays vertically
     return(np.vstack(snapshots))
 
-def is_good_trend_csv(df, start_index, percentage_diff_threshold, debug=False):
+def is_good_trend_csv(df, start_index, percentage_diff_threshold, debug=False, GoodTrendOnly=True, chartsPath = "charts", trainPath = "train",resultPath = "Good", suffix = ""):
     # Randomly select WINDOW_DAYS consecutive days
     predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
-    if(is_good_trend(predict_data, percentage_diff_threshold)):
+    if(is_good_trend(predict_data, percentage_diff_threshold) == GoodTrendOnly):
+        # print("Good trend")
+        # Calculate regression to do the classification
+        plt.figure(figsize=(4, 4))
+        regression_data = predict_data['adjclose']
+        x = regression_data.index.values
+        y = regression_data.values  # Corrected line
+        slope, intercept, r_value, p_value, std_err = linregress(x, y)
+        print(f"The slope of the regression line is: {slope}")
+        # Plot the predict_data
+        plt.scatter(x, y, color='blue', label='Data')
+        # Calculate the values of the regression line
+        regression_line = [slope*xi + intercept for xi in x]
+        # Plot the regression line
+        plt.plot(x, regression_line, color='red', label='Regression Line')
+        figName = f"{chartsPath}\\{resultPath}\\predchart{start_index}-{suffix}.png"
+        print(f"Saving to {figName}")
+        plt.savefig(figName)
         if debug:
-            print("Good trend")
-             # Calculate regression to do the classification
-            regression_data = predict_data['adjclose']
-            x = regression_data.index.values
-            y = regression_data.values  # Corrected line
-
-            slope, intercept, r_value, p_value, std_err = linregress(x, y)
-            print(f"The slope of the regression line is: {slope}")
-            # Plot the predict_data
-            plt.scatter(x, y, color='blue', label='Data')
-            # Calculate the values of the regression line
-            regression_line = [slope*xi + intercept for xi in x]
-            # Plot the regression line
-            plt.plot(x, regression_line, color='red', label='Regression Line')
-            plt.savefig(f'regression_plot{start_index}.png')
             plt.show()
-            
-        return True   
+        return GoodTrendOnly   
     
-def create_full_snapshot_levels(file_list, debug=False, num_charts = 5):
+def create_full_snapshot_levels(file_list, debug=False, GoodTrendOnly = True, chartsPath = "charts", trainPath = "train", resultPath = "Good", suffix = ""):
 
-    for Reps in range(num_charts):
-        # Check if the trend is good
-        df = pd.read_csv(file_list[0])
-        max_start_index = len(df) - WINDOW_DAYS
+    # Check if the trend is good
+    df = pd.read_csv(file_list[0])
+    max_start_index = len(df) - WINDOW_DAYS
+    start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
+    print(f" PREDICTING FROM VALUE {start_index} {suffix}")
+    while (is_good_trend_csv(df, start_index, 5, debug=debug, GoodTrendOnly=GoodTrendOnly, chartsPath=chartsPath, trainPath=trainPath, resultPath=resultPath, suffix=suffix) != GoodTrendOnly):
         start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-        while (not(is_good_trend_csv(df, start_index, 5, True))):
-            start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-            print("Bad trend")
+        print("Bad trend")
 
-        print(f"Good trend at index {start_index}")
-        stock_view = [create_stock_snapshot_levels(filename, start_index, level_array=[1,5,10]) for filename in file_list]
-        # Stack the arrays vertically
-        fullPic = np.vstack(stock_view)    
-        # swap rows to get all same indicators together.
-        if(debug):    
-            plt.imshow(fullPic, cmap='gray', aspect='auto')
-            plt.colorbar()  # Optionally add a colorbar
-            plt.show()     
-            print(fullPic.shape)  
-        # Number of rows in each group
-        group_size = 30 # 10 indicators
-        # Number of complete groups
-        num_groups = fullPic.shape[0] // group_size
-        # Initialize an empty list to hold the reordered rows
-        reordered_rows = []
-        # Loop over each row within the groups
-        for i in range(group_size):
-            # Extract the i-th row from each group and concatenate them
-            rows = [fullPic[j * group_size + i] for j in range(num_groups) if j * group_size + i < fullPic.shape[0]]
-            if rows:  # If there are rows extracted, extend the list
-                reordered_rows.extend(rows)
-        # Convert the list of reordered rows back to a numpy array
-        reordered_arr = np.array(reordered_rows)
-        
-        # Save the array as a PNG image
-        reordered_arr_normalized = ((reordered_arr - reordered_arr.min()) * (1/(reordered_arr.max() - reordered_arr.min()) * 255)).astype('uint8')
-        imageio.imsave(f"indicator{start_index}.png", reordered_arr_normalized)
-        if(debug):
-            print(reordered_arr.shape)
-            plt.imshow(reordered_arr, cmap='gray', aspect='auto')
-            # plt.colorbar()  # Optionally add a colorbar
-            plt.show()   
+    # print(f"Good trend at index {start_index}")
+    stock_view = [create_stock_snapshot_levels(filename, start_index, level_array=[1,5,10]) for filename in file_list]
+    # Stack the arrays vertically
+    fullPic = np.vstack(stock_view)    
+    # swap rows to get all same indicators together.
+    if(debug):    
+        plt.imshow(fullPic, cmap='gray', aspect='auto')
+        plt.colorbar()  # Optionally add a colorbar
+        plt.show()     
+        print(fullPic.shape)  
+    # Number of rows in each group
+    group_size = 30 # 10 indicators
+    # Number of complete groups
+    num_groups = fullPic.shape[0] // group_size
+    # Initialize an empty list to hold the reordered rows
+    reordered_rows = []
+    # Loop over each row within the groups
+    for i in range(group_size):
+        # Extract the i-th row from each group and concatenate them
+        rows = [fullPic[j * group_size + i] for j in range(num_groups) if j * group_size + i < fullPic.shape[0]]
+        if rows:  # If there are rows extracted, extend the list
+            reordered_rows.extend(rows)
+    # Convert the list of reordered rows back to a numpy array
+    reordered_arr = np.array(reordered_rows)
+    
+    # Save the array as a PNG image
+    reordered_arr_normalized = ((reordered_arr - reordered_arr.min()) * (1/(reordered_arr.max() - reordered_arr.min()) * 255)).astype('uint8')
+    figName = f"{trainPath}\\{resultPath}\\indicator{start_index}-{suffix}.png"
+    imageio.imsave(figName, reordered_arr_normalized)
+    if(debug):
+        print(reordered_arr.shape)
+        plt.imshow(reordered_arr, cmap='gray', aspect='auto')
+        # plt.colorbar()  # Optionally add a colorbar
+        plt.show()   
     
 # Visualize in deep-------------------------------------------------------------
 def select_and_plot_indicators(csv_file):
@@ -312,7 +324,7 @@ def select_and_plot_indicators(csv_file):
     max_start_index = len(df) - WINDOW_DAYS
     while True:
         start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-        print(f" PREDICTING FROM VALUE {start_index}")
+        # print(f" PREDICTING FROM VALUE {start_index}")
         selected_data = df.iloc[start_index-WINDOW_DAYS:start_index]
         predict_data = df.iloc[start_index:start_index+PREDICT_DAYS]
 
@@ -322,7 +334,7 @@ def select_and_plot_indicators(csv_file):
         y = regression_data.values  # Corrected line
 
         slope, intercept, r_value, p_value, std_err = linregress(x, y)
-        print(f"The slope of the regression line is: {slope}")
+        # print(f"The slope of the regression line is: {slope}")
         if is_good_trend(predict_data, 5):
             break
     # Plot the predict_data
@@ -484,10 +496,30 @@ def select_and_plot_indicators(csv_file):
         
 # select_and_plot_indicators('c:\stock\AAPL.csv')
 # create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv'])
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
-create_full_snapshot_levels([r'c:\stock\AAPL.csv',r'c:\stock\GOOGL.csv',r'c:\stock\NDAQ.csv',r'c:\stock\YM=F.csv',r'c:\stock\ES=F.csv'])
+# Keep the first element
+stockArray = [ 'AAPL', 'ES=F', "YM=F", "NQ=F", 'YM=F',"^FTSE","GC=F", "SI=F"]
+# Add 'c:\\stock\\Clean\\' to the start and '.csv' to the end of each symbol
+stockArray = [r'c:\stock\Clean\{}.csv'.format(symbol) for symbol in stockArray]
+
+first_element = [stockArray[0]]
+# Permute all but the first element
+permutations = list(itertools.permutations(stockArray[1:]))
+# Combine the first element with each permutation
+permuted_lists = [first_element + list(permutation) for permutation in permutations]
+# print(permuted_lists)
+# for i in range(1000):
+#     print(f"Iteration {i} ")
+#     print(permuted_lists[i%len(permuted_lists)])
+# Get the basenames and take the first two characters
+initials = [os.path.basename(path)[:4] for path in stockArray]
+for i in range(5000):
+    debug = False
+    stockList = permuted_lists[i%len(permuted_lists)]
+    initials = [os.path.basename(path)[:4] for path in stockList]
+    initials_string = '-'.join(initials)
+    print(f"Initials {initials_string}")
+    create_full_snapshot_levels(stockArray,debug=debug, GoodTrendOnly = True, chartsPath = "outputData\\charts", trainPath = "outputData\\train", resultPath = "Good", suffix = initials_string)
+    create_full_snapshot_levels(stockArray,debug=debug, GoodTrendOnly = False, chartsPath = "outputData\\charts", trainPath = "outputData\\train", resultPath = "Bad", suffix = initials_string)
+
+
 # select_and_plot_indicators(r'c:\stock\ES=F.csv')

@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import random
 import pandas as pd
 from scipy.stats import linregress
-
+import imageio
 
 NUM_DAYS = 120
 WINDOW_DAYS = 360
@@ -252,47 +252,55 @@ def is_good_trend_csv(df, start_index, percentage_diff_threshold, debug=False):
             regression_line = [slope*xi + intercept for xi in x]
             # Plot the regression line
             plt.plot(x, regression_line, color='red', label='Regression Line')
+            plt.savefig(f'regression_plot{start_index}.png')
             plt.show()
+            
         return True   
     
-def create_full_snapshot_levels(file_list):
+def create_full_snapshot_levels(file_list, debug=False, num_charts = 5):
 
-    # Check if the trend is good
-    df = pd.read_csv(file_list[0])
-    max_start_index = len(df) - WINDOW_DAYS
-    start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-    while (not(is_good_trend_csv(df, start_index, 5, True))):
+    for Reps in range(num_charts):
+        # Check if the trend is good
+        df = pd.read_csv(file_list[0])
+        max_start_index = len(df) - WINDOW_DAYS
         start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
-        print("Bad trend")
+        while (not(is_good_trend_csv(df, start_index, 5, True))):
+            start_index = random.randint(WINDOW_DAYS, max_start_index-PREDICT_DAYS)
+            print("Bad trend")
 
-    print(f"Good trend at index {start_index}")
-    stock_view = [create_stock_snapshot_levels(filename, start_index, level_array=[1,5,10]) for filename in file_list]
-    # Stack the arrays vertically
-    fullPic = np.vstack(stock_view)    
-    # swap rows to get all same indicators together.
-    
-    plt.imshow(fullPic, cmap='gray', aspect='auto')
-    plt.colorbar()  # Optionally add a colorbar
-    plt.show()     
-    print(fullPic.shape)  
-    # Number of rows in each group
-    group_size = 30 # 10 indicators
-    # Number of complete groups
-    num_groups = fullPic.shape[0] // group_size
-    # Initialize an empty list to hold the reordered rows
-    reordered_rows = []
-    # Loop over each row within the groups
-    for i in range(group_size):
-        # Extract the i-th row from each group and concatenate them
-        rows = [fullPic[j * group_size + i] for j in range(num_groups) if j * group_size + i < fullPic.shape[0]]
-        if rows:  # If there are rows extracted, extend the list
-            reordered_rows.extend(rows)
-    # Convert the list of reordered rows back to a numpy array
-    reordered_arr = np.array(reordered_rows)
-    print(reordered_arr.shape)
-    plt.imshow(reordered_arr, cmap='gray', aspect='auto')
-    plt.colorbar()  # Optionally add a colorbar
-    plt.show()   
+        print(f"Good trend at index {start_index}")
+        stock_view = [create_stock_snapshot_levels(filename, start_index, level_array=[1,5,10]) for filename in file_list]
+        # Stack the arrays vertically
+        fullPic = np.vstack(stock_view)    
+        # swap rows to get all same indicators together.
+        if(debug):    
+            plt.imshow(fullPic, cmap='gray', aspect='auto')
+            plt.colorbar()  # Optionally add a colorbar
+            plt.show()     
+            print(fullPic.shape)  
+        # Number of rows in each group
+        group_size = 30 # 10 indicators
+        # Number of complete groups
+        num_groups = fullPic.shape[0] // group_size
+        # Initialize an empty list to hold the reordered rows
+        reordered_rows = []
+        # Loop over each row within the groups
+        for i in range(group_size):
+            # Extract the i-th row from each group and concatenate them
+            rows = [fullPic[j * group_size + i] for j in range(num_groups) if j * group_size + i < fullPic.shape[0]]
+            if rows:  # If there are rows extracted, extend the list
+                reordered_rows.extend(rows)
+        # Convert the list of reordered rows back to a numpy array
+        reordered_arr = np.array(reordered_rows)
+        
+        # Save the array as a PNG image
+        reordered_arr_normalized = ((reordered_arr - reordered_arr.min()) * (1/(reordered_arr.max() - reordered_arr.min()) * 255)).astype('uint8')
+        imageio.imsave(f"indicator{start_index}.png", reordered_arr_normalized)
+        if(debug):
+            print(reordered_arr.shape)
+            plt.imshow(reordered_arr, cmap='gray', aspect='auto')
+            # plt.colorbar()  # Optionally add a colorbar
+            plt.show()   
     
 # Visualize in deep-------------------------------------------------------------
 def select_and_plot_indicators(csv_file):

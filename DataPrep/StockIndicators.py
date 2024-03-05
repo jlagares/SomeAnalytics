@@ -518,8 +518,8 @@ for i in range(5000):
     initials = [os.path.basename(path)[:4] for path in stockList]
     initials_string = '-'.join(initials)
     print(f"Initials {initials_string}")
-    create_full_snapshot_levels(stockArray,debug=debug, GoodTrendOnly = True, chartsPath = "outputData\\charts", trainPath = "outputData\\train", resultPath = "Good", suffix = initials_string)
-    create_full_snapshot_levels(stockArray,debug=debug, GoodTrendOnly = False, chartsPath = "outputData\\charts", trainPath = "outputData\\train", resultPath = "Bad", suffix = initials_string)
+    create_full_snapshot_levels(stockList,debug=debug, GoodTrendOnly = True, chartsPath = "outputData\\charts", trainPath = "outputData\\train", resultPath = "Good", suffix = initials_string)
+    create_full_snapshot_levels(stockList,debug=debug, GoodTrendOnly = False, chartsPath = "outputData\\charts", trainPath = "outputData\\train", resultPath = "Bad", suffix = initials_string)
 
 
 # select_and_plot_indicators(r'c:\stock\ES=F.csv')
